@@ -1,0 +1,90 @@
+# =====================
+# Python / Virtual Env
+# =====================
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =====================
+# OS / Editor
+# =====================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace
+
+# =====================
+# Logs / Temp
+# =====================
+*.log
+logs/
+tmp/
+temp/
+
+# =====================
+# Test / Output Artifacts
+# =====================
+tests/output/
+tests/screenshots/
+screenshots/
+output/
+_work/
+
+# =====================
+# PyInstaller
+# =====================
+build/
+dist/
+*.spec
+!tools/*.spec   # 如果你想保留 tools 目录下的 spec，可以打开这一行
+
+# =====================
+# Executables
+# =====================
+*.exe
+*.dll
+*.pyd
+
+# =====================
+# OCR / MinerU
+# =====================
+# Token & config (⚠️ 不能提交)
+config.json
+*.token
+.mineru_token
+mineru_token.json
+
+# 示例配置可以提交
+!config.example.json
+
+# =====================
+# Data / PDFs (体量大 & 敏感)
+# =====================
+*.pdf
+*.zip
+*.xlsx
+*.csv
+
+# 如果你有 sample 想保留
+!samples/**
+!samples/**/*.pdf
+
+# =====================
+# Images (OCR screenshots)
+# =====================
+*.png
+*.jpg
+*.jpeg
+*.bmp
+
+# =====================
+# Windows build scripts temp
+# =====================
+*.ps1.bak
