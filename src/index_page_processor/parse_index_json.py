@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import re
 from html.parser import HTMLParser
 from typing import Any, List, Optional, Tuple
 
-# 只要行里出现 50- 就算候选；图号提取更宽松（允许 OCR 插空格）
-DRAWING_NO_RE = re.compile(r"(50-\s*[A-Z0-9\-]+\s*-\s*\d{2,4})")
+from src.drawing_num import extract_drawing_num
 
 def _looks_like_title(s: str) -> bool:
     if not s:
@@ -72,11 +70,9 @@ def _extract_from_row(row: List[str]) -> Optional[Tuple[str, str]]:
     - title: 去掉图号后，挑“最像标题”的 cell（最长且符合 looks_like_title）
     """
     joined = " ".join(row)
-    m = DRAWING_NO_RE.search(joined)
-    if not m:
+    drawing_no = extract_drawing_num(joined)
+    if not drawing_no:
         return None
-
-    drawing_no = m.group(1).replace(" ", "")
 
     candidates: List[str] = []
     for cell in row:

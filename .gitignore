@@ -21,15 +21,16 @@ Thumbs.db
 *.code-workspace
 
 # =====================
-# Logs / Temp
+# Logs / Temp / Cache
 # =====================
 *.log
 logs/
 tmp/
 temp/
+.cache/
 
 # =====================
-# Test / Output Artifacts
+# Test / Runtime Artifacts
 # =====================
 tests/output/
 tests/screenshots/
@@ -42,49 +43,43 @@ _work/
 # =====================
 build/
 dist/
-*.spec
-!tools/*.spec   # 如果你想保留 tools 目录下的 spec，可以打开这一行
+dist_*/
 
 # =====================
-# Executables
+# Executables / Native Artifacts
 # =====================
 *.exe
 *.dll
 *.pyd
 
 # =====================
-# OCR / MinerU
+# OCR / MinerU Secrets
 # =====================
-# Token & config (⚠️ 不能提交)
 config.json
 *.token
 .mineru_token
 mineru_token.json
 
-# 示例配置可以提交
-!config.example.json
-
 # =====================
-# Data / PDFs (体量大 & 敏感)
+# Data / Generated Files
 # =====================
 *.pdf
 *.zip
 *.xlsx
 *.csv
-
-# 如果你有 sample 想保留
-!samples/**
-!samples/**/*.pdf
-
-# =====================
-# Images (OCR screenshots)
-# =====================
 *.png
 *.jpg
 *.jpeg
 *.bmp
 
+# Keep tracked project files
+!DrawingTitleComparison.spec
+
+# Optional sample data
+!samples/**
+!samples/**/*.pdf
+
 # =====================
-# Windows build scripts temp
+# Windows script backups
 # =====================
 *.ps1.bak

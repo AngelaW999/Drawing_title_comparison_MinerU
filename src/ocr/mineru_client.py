@@ -25,23 +25,22 @@ class MinerUConfig:
     poll_interval_sec: float = 2.0
     timeout_sec: float = 300.0
 
-    # ✅ 新增：网络重试与节流（建议保留默认）
     request_timeout_sec: float = 60.0
     max_retries: int = 5
     retry_backoff_sec: float = 1.5
-    throttle_sec: float = 0.15  # 每次请求之间轻微停一下，减少 10055
+    throttle_sec: float = 0.15
 
 
 class MinerUClient:
     """
     只做 HTTP：申请上传链接 -> PUT 上传 -> 轮询 batch -> 下载 full_zip_url
-    ✅ 关键：复用 requests.Session 以复用连接池，避免 WinError 10055
+    关键：复用 requests.Session 以复用连接池，避免 WinError 10055
     """
+
     def __init__(self, cfg: MinerUConfig):
         self.cfg = cfg
         self.session = requests.Session()
 
-        # 连接池稍微放大点（默认太小也容易频繁建连）
         adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50, max_retries=0)
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
@@ -64,9 +63,6 @@ class MinerUClient:
             time.sleep(self.cfg.throttle_sec)
 
     def _request_json(self, method: str, url: str, **kwargs) -> dict:
-        """
-        ✅ 统一请求入口：Session + 重试(backoff)
-        """
         last_err: Exception | None = None
         for attempt in range(1, self.cfg.max_retries + 1):
             try:
@@ -81,7 +77,6 @@ class MinerUClient:
                 return resp.json()
             except Exception as e:
                 last_err = e
-                # backoff: 1.5, 3, 4.5...
                 time.sleep(self.cfg.retry_backoff_sec * attempt)
 
         raise RuntimeError(
@@ -112,7 +107,6 @@ class MinerUClient:
 
         for f, put_url in zip(files, put_urls):
             with open(f, "rb") as fp:
-                # 上传也走 session，复用连接
                 self._sleep_throttle()
                 r = self.session.put(put_url, data=fp, timeout=300)
                 r.raise_for_status()
@@ -153,7 +147,6 @@ class MinerUClient:
         return r.content
 
     def parse_single_file(self, file_path: Path) -> bytes:
-        # 注意：MinerU 按 name 匹配，所以必须用实际上传的 name
         upload_name = Path(file_path).name
         batch_id, put_urls = self.apply_upload_urls([Path(file_path)])
         self.upload_files([Path(file_path)], put_urls)

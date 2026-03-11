@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
+
+from openpyxl import Workbook
 
 from src.index_page_processor.extract_index_pairs import extract_index_pairs
 from src.drawing_processor.extract_drawing_title import extract_drawing_title
@@ -142,7 +143,7 @@ def build_review_items(
 
 
 def write_final_excel(
-    out_csv: Path,
+    out_xlsx: Path,
     items: List[ReviewItem],
     selected_map: Dict[str, bool],
 ) -> int:
@@ -152,8 +153,8 @@ def write_final_excel(
       - auto_selected=True 的（图纸缺失）必导出
       - 其他条目：selected_map[key]==True 才导出（勾选=不一致=导出）
     """
-    out_csv = Path(out_csv)
-    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    out_xlsx = Path(out_xlsx)
+    out_xlsx.parent.mkdir(parents=True, exist_ok=True)
 
     header = [
         "PDF路径",
@@ -183,9 +184,13 @@ def write_final_excel(
             ]
         )
 
-    with out_csv.open("w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(header)
-        w.writerows(rows)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "diffs"
+    ws.append(header)
+    for row in rows:
+        ws.append(row)
+
+    wb.save(out_xlsx)
 
     return len(rows)

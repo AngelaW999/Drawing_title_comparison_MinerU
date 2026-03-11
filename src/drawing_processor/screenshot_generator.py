@@ -16,11 +16,10 @@ class DrawingScreenshotGenerator:
 
     @staticmethod
     def _project_root() -> Path:
-        # src/drawing_text_processor/... -> project root is src/..
-        return Path(__file__).resolve().parent.parent
+        return Path(__file__).resolve().parents[2]
 
     def _output_dir(self) -> Path:
-        out_dir = self._project_root() / "test" / "screenshots"
+        out_dir = self._project_root() / ".cache" / "screenshots"
         out_dir.mkdir(parents=True, exist_ok=True)
         return out_dir
 

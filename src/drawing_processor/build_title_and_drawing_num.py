@@ -4,11 +4,11 @@ from __future__ import annotations
 import re
 from typing import List, Tuple
 
+from src.drawing_num import extract_drawing_num, is_drawing_num, normalize_drawing_num
+
 __all__ = ["build_title_and_drawing_num_from_lines"]
 
 # drawing num（允许各种横杠，最终会统一成 -）
-_DRAWING_NUM_ANY_RE = re.compile(r"\b50[-－—][0-9A-Za-z\-－—]+\b")
-
 # “图号 / Dwg.No”这类标签行（常出现在图号旁边）
 _LABEL_RE = re.compile(r"(?:图\s*号|dwg\s*\.?\s*no\.?|wg\s*\.?\s*no\.?|g\s*\.?\s*no\.?)", re.IGNORECASE)
 
@@ -19,8 +19,6 @@ _MD_PREFIX_RE = re.compile(r"^\s*(?:#+|\*+|-+|>+)\s*")
 _TRAILING_INVIS_RE = re.compile(r"[\u200b\u200c\u200d\ufeff\u00a0\u3000]+$")
 
 # 把各种横杠统一成 "-"
-_DASH_FIX_RE = re.compile(r"[-－—]+")
-
 
 def _clean_line(s: str) -> str:
     t = (s or "").strip()
@@ -31,10 +29,6 @@ def _clean_line(s: str) -> str:
     # 常见噪声：首尾逗号/分号
     t = t.strip(" ,，;；")
     return t
-
-
-def _norm_drawing_num(s: str) -> str:
-    return _DASH_FIX_RE.sub("-", s)
 
 
 def build_title_and_drawing_num_from_lines(lines: List[str]) -> Tuple[str | None, str | None]:
@@ -61,9 +55,9 @@ def build_title_and_drawing_num_from_lines(lines: List[str]) -> Tuple[str | None
     dn_idx = None
 
     for i, ln in enumerate(cleaned):
-        m = _DRAWING_NUM_ANY_RE.search(ln)
-        if m:
-            drawing_num = _norm_drawing_num(m.group(0))
+        dn = extract_drawing_num(ln)
+        if dn:
+            drawing_num = dn
             dn_idx = i
             break
 
@@ -88,7 +82,7 @@ def build_title_and_drawing_num_from_lines(lines: List[str]) -> Tuple[str | None
             if _LABEL_RE.search(ln):
                 continue
             # 也过滤“纯图号那种行”（万一重复出现）
-            if _DRAWING_NUM_ANY_RE.fullmatch(ln):
+            if is_drawing_num(ln):
                 continue
 
             title_lines.append(ln)
@@ -99,7 +93,7 @@ def build_title_and_drawing_num_from_lines(lines: List[str]) -> Tuple[str | None
 
     # 若上方没抓到（特殊版式），兜底：选最长的非标签行
     if not title_lines:
-        cands = [ln for ln in cleaned if not _LABEL_RE.search(ln) and drawing_num not in _norm_drawing_num(ln)]
+        cands = [ln for ln in cleaned if not _LABEL_RE.search(ln) and drawing_num not in normalize_drawing_num(ln)]
         if cands:
             title_lines = [max(cands, key=len)]
 

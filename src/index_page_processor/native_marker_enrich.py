@@ -5,13 +5,13 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from src.drawing_num import extract_drawing_num
+
 # ============================================================
 # Patterns (native marker extraction)
 # ============================================================
 
 # 图号 anchor：如 50-S05791Z-T0101-024
-DRAWING_NO_RE = re.compile(r"\b50-[A-Z0-9\-]+\b", re.IGNORECASE)
-
 # marker：支持 i11 / p1（允许空格、允许撇号）
 # 例：i11, i 11', p1, p 1
 MARKER_RE = re.compile(r"\b([ip])\s*(\d{1,4})\s*'?\b", re.IGNORECASE)
@@ -152,9 +152,9 @@ def _parse_markers_from_pages(pages: Dict[int, List[str]]) -> Dict[str, str]:
 
         anchors: List[Tuple[int, str]] = []
         for i, ln in enumerate(lines):
-            m = DRAWING_NO_RE.search(ln or "")
-            if m:
-                anchors.append((i, m.group(0)))
+            dn = extract_drawing_num(ln or "")
+            if dn:
+                anchors.append((i, dn))
 
         if not anchors:
             continue
