@@ -55,6 +55,7 @@ class DrawingScreenshotGenerator:
         region: Dict,
         *,
         page: Optional[fitz.Page] = None,
+        suffix: str = "title",
     ) -> str:
         """Generate (or reuse) a title-region screenshot.
 
@@ -67,7 +68,8 @@ class DrawingScreenshotGenerator:
                 return ""
 
             out_dir = self._output_dir()
-            out_path = out_dir / f"{pdf_path.stem}_title.png"
+            safe_suffix = (suffix or "title").strip().replace(" ", "_")
+            out_path = out_dir / f"{pdf_path.stem}_{safe_suffix}.png"
 
             # Cache reuse
             if self._is_up_to_date(out_path, pdf_path):

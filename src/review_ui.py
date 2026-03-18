@@ -1,5 +1,3 @@
-# src/review_ui.py
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,59 +20,58 @@ class ReviewItem:
     diff_type: str
     pdf_path: str
     drawing_num: str
-    title_index: str
-    title_drawing: str
+    index_title: str
+    index_marker: str
+    drawing_title: str
+    drawing_marker: str
+    title_source: str
     screenshot_path: str
+    marker_screenshot_path: str = ""
     auto_selected: bool = False
 
 
-def _norm(s: str) -> str:
-    return (s or "").strip()
+def _norm(text: str) -> str:
+    return (text or "").strip()
 
 
 def _build_left_text(it: ReviewItem) -> str:
     file_name = Path(it.pdf_path).name if it.pdf_path else ""
-    head = f"{it.diff_type} | 图号={it.drawing_num} | {file_name}".strip()
-    idx = _norm(it.title_index)
-    drw = _norm(it.title_drawing)
-    return f"{head}\n目录 : {idx}\n图纸: {drw}"
+    lines = [
+        f"{it.diff_type} | 图号={it.drawing_num} | {file_name}".strip(),
+        f"目录标题：{_norm(it.index_title)}",
+        f"目录marker：{_norm(it.index_marker)}",
+        f"图纸标题：{_norm(it.drawing_title)}",
+        f"图纸marker：{_norm(it.drawing_marker)}",
+    ]
+    return "\n".join(lines)
 
 
 class ReviewWindow(tk.Toplevel):
-    """
-    三列比例（更偏向“左列更宽”）：
-      - 左：文本（更宽）
-      - 中：截图
-      - 右：checkbox
-    """
-    def __init__(self, master: tk.Tk, items: List[ReviewItem], title: str = "差异复核（勾选=导出）"):
+    def __init__(self, master: tk.Tk, items: List[ReviewItem], title: str = "差异复核"):
         super().__init__(master)
         self.title(title)
-        self.geometry("1280x720")
+        self.geometry("1380x760")
 
         self.items = items
         self.selected: Dict[str, bool] = {it.key: False for it in items}
-
         self._img_refs: Dict[str, object] = {}
 
         self._build_ui()
         self._render_rows()
 
     def _build_ui(self) -> None:
-        self.var_tip = tk.StringVar(value=f"共 {len(self.items)} 条（默认不勾；勾选=不一致=导出）")
+        self.var_tip = tk.StringVar(value=f"共 {len(self.items)} 条（默认不勾选；勾选后导出）")
         ttk.Label(self, textvariable=self.var_tip, font=("Microsoft YaHei UI", 11, "bold")).pack(
             anchor="w", padx=12, pady=(10, 6)
         )
 
         hdr = ttk.Frame(self)
         hdr.pack(fill="x", padx=12)
-
-        # ✅ 左列更宽：比例如 5 : 3 : 1
         hdr.columnconfigure(0, weight=5)
         hdr.columnconfigure(1, weight=3)
         hdr.columnconfigure(2, weight=1)
 
-        ttk.Label(hdr, text="目录/图纸标题").grid(row=0, column=0, sticky="w")
+        ttk.Label(hdr, text="目录/图纸对比").grid(row=0, column=0, sticky="w")
         ttk.Label(hdr, text="截图").grid(row=0, column=1)
         ttk.Label(hdr, text="不一致").grid(row=0, column=2)
 
@@ -101,12 +98,9 @@ class ReviewWindow(tk.Toplevel):
         style = ttk.Style(self)
         style.configure("Big.TButton", font=("Microsoft YaHei UI", 11), padding=(18, 10))
 
-        def big_btn(**kw):
-            return ttk.Button(bot, style="Big.TButton", **kw)
-
-        big_btn(text="全不选", command=self._select_none).pack(side="left")
-        big_btn(text="全选", command=self._select_all).pack(side="left", padx=10)
-        big_btn(text="保存并关闭", command=self._finish).pack(side="right")
+        ttk.Button(bot, text="全不选", style="Big.TButton", command=self._select_none).pack(side="left")
+        ttk.Button(bot, text="全选", style="Big.TButton", command=self._select_all).pack(side="left", padx=10)
+        ttk.Button(bot, text="保存并关闭", style="Big.TButton", command=self._finish).pack(side="right")
 
     def _on_inner_configure(self, _evt=None) -> None:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -122,8 +116,8 @@ class ReviewWindow(tk.Toplevel):
             pass
 
     def _render_rows(self) -> None:
-        for c in self.inner.winfo_children():
-            c.destroy()
+        for child in self.inner.winfo_children():
+            child.destroy()
         self._img_refs.clear()
 
         if not self.items:
@@ -133,33 +127,37 @@ class ReviewWindow(tk.Toplevel):
         for it in self.items:
             row = ttk.Frame(self.inner)
             row.pack(fill="x", pady=6)
-
-            # ✅ 左更宽：5 : 3 : 1
             row.columnconfigure(0, weight=5)
             row.columnconfigure(1, weight=3)
             row.columnconfigure(2, weight=1)
 
-            left_txt = _build_left_text(it)
-            lbl_left = ttk.Label(row, text=left_txt, justify="left", anchor="w")
+            lbl_left = ttk.Label(row, text=_build_left_text(it), justify="left", anchor="w")
             lbl_left.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
             img_cell = ttk.Frame(row)
             img_cell.grid(row=0, column=1, sticky="nsew", padx=(0, 10))
 
-            img_lbl = ttk.Label(img_cell, text="", anchor="center")
-            img_lbl.pack(fill="both", expand=True)
-            self._set_image(img_lbl, it.key, it.screenshot_path)
+            title_diff = "标题" in (it.diff_type or "")
+            marker_only = (it.diff_type or "") == "marker不一致"
+            if title_diff or not marker_only:
+                ttk.Label(img_cell, text="标题截图", anchor="w").pack(anchor="w")
+                title_lbl = ttk.Label(img_cell, text="", anchor="center")
+                title_lbl.pack(fill="both", expand=True)
+                self._set_image(title_lbl, f"{it.key}_title", it.screenshot_path, (560, 180))
+
+            if marker_only and it.marker_screenshot_path:
+                ttk.Label(img_cell, text="marker截图", anchor="w").pack(anchor="w", pady=(6, 0))
+                marker_lbl = ttk.Label(img_cell, text="", anchor="center")
+                marker_lbl.pack(fill="both", expand=True)
+                self._set_image(marker_lbl, f"{it.key}_marker", it.marker_screenshot_path, (280, 160))
 
             var = tk.BooleanVar(value=self.selected.get(it.key, False))
 
             def _on_toggle(k=it.key, v=var):
                 self.selected[k] = bool(v.get())
 
-            chk = ttk.Checkbutton(row, variable=var, command=_on_toggle)
-            chk.grid(row=0, column=2, sticky="n")
-
-            sep = ttk.Separator(self.inner, orient="horizontal")
-            sep.pack(fill="x", pady=(2, 0))
+            ttk.Checkbutton(row, variable=var, command=_on_toggle).grid(row=0, column=2, sticky="n")
+            ttk.Separator(self.inner, orient="horizontal").pack(fill="x", pady=(2, 0))
 
             self.after(0, lambda lab=lbl_left: self._update_wrap(lab))
 
@@ -168,13 +166,11 @@ class ReviewWindow(tk.Toplevel):
             w = self.canvas.winfo_width()
             if w <= 0:
                 return
-            # ✅ 左列更宽：大约 55% 宽
-            target = max(360, int(w * 0.55) - 40)
-            label.configure(wraplength=target)
+            label.configure(wraplength=max(420, int(w * 0.52) - 40))
         except Exception:
             pass
 
-    def _set_image(self, label: ttk.Label, key: str, img_path: str) -> None:
+    def _set_image(self, label: ttk.Label, key: str, img_path: str, max_size: tuple[int, int]) -> None:
         if Image is None or ImageTk is None:
             label.configure(text="（未安装 Pillow）")
             return
@@ -189,11 +185,7 @@ class ReviewWindow(tk.Toplevel):
 
         try:
             im = Image.open(str(p))
-            # ✅ 中列更像“2/4”：尺寸给大一点，但不把行高撑爆
-            max_w = 560
-            max_h = 160
-            im.thumbnail((max_w, max_h))
-
+            im.thumbnail(max_size)
             ph = ImageTk.PhotoImage(im)
             self._img_refs[key] = ph
             label.configure(image=ph, text="")
