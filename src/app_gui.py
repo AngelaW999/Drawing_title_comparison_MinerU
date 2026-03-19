@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import queue
+import sys
 import threading
 import traceback
+import ctypes
 from dataclasses import dataclass
 from pathlib import Path
 import tkinter as tk
@@ -13,7 +15,35 @@ from tkinter import END, IntVar, StringVar, Text, Tk, filedialog, messagebox, tt
 
 from src.ocr.token_provider import MinerUTokenError, get_mineru_token, set_mineru_token
 from src.pipeline.compare_folder import build_review_items, write_final_excel
+from src.process_cache import cleanup_generated_cache_files
 from src.review_ui import review_items
+
+
+def _runtime_root() -> Path:
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        return Path(meipass)
+    return Path(__file__).resolve().parents[1]
+
+
+def _icon_candidates() -> list[Path]:
+    runtime_root = _runtime_root()
+    project_root = Path(__file__).resolve().parents[1]
+    return [
+        runtime_root / "assets" / "icon.ico",
+        runtime_root / "assets" / "icon.png",
+        project_root / "assets" / "icon.ico",
+        project_root / "assets" / "icon.png",
+    ]
+
+
+def _set_windows_app_id() -> None:
+    if os.name != "nt":
+        return
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("DrawingTitleCompareTool")
+    except Exception:
+        pass
 
 
 def build_unique_output_path(out_dir: Path, input_dir: Path) -> Path:
@@ -87,9 +117,13 @@ class AppState:
 
 class App(Tk):
     def __init__(self) -> None:
+        _set_windows_app_id()
         super().__init__()
         self.title("目录图纸标题对比工具")
         self.geometry("980x620")
+
+        self._icon_image = None
+        self._apply_window_icon()
 
         self._input_var = StringVar(value="")
         self._output_var = StringVar(value="")
@@ -109,6 +143,21 @@ class App(Tk):
         self._error_payload: str | None = None
 
         self._build_ui()
+
+    def _apply_window_icon(self) -> None:
+        for icon_path in _icon_candidates():
+            if not icon_path.exists():
+                continue
+            try:
+                if icon_path.suffix.lower() == ".ico":
+                    self.iconbitmap(default=str(icon_path))
+                    return
+                image = tk.PhotoImage(file=str(icon_path))
+                self.iconphoto(True, image)
+                self._icon_image = image
+                return
+            except Exception:
+                continue
 
     def _build_ui(self) -> None:
         pad = {"padx": 10, "pady": 8}
@@ -345,12 +394,14 @@ class App(Tk):
 
             out_xlsx = build_unique_output_path(state.output_dir, state.input_dir)
             exported = write_final_excel(out_xlsx, items, selected_map)
+            cleaned_cache = cleanup_generated_cache_files()
 
             self._append_log("")
             self._append_log("完成")
             self._append_log(f"输出: {out_xlsx} （行数={exported}）")
+            self._append_log(f"清理本次进程生成的 cache 文件: {cleaned_cache}")
 
-            messagebox.showinfo("完成", f"已完成。\n\n输出：{out_xlsx}\n导出行数：{exported}")
+            messagebox.showinfo("完成", f"已完成。\n\n输出：{out_xlsx}\n导出行数：{exported}\n清理 cache 文件：{cleaned_cache}")
         finally:
             self._set_running(False)
 

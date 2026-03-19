@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Optional, Union
 
 import fitz  # PyMuPDF
+from src.process_cache import register_cache_file
 
 DEFAULT_DPI = 300
 
@@ -82,6 +83,7 @@ class DrawingScreenshotGenerator:
                 clip_rect = self._safe_region(region, page)
                 pix = page.get_pixmap(matrix=mat, clip=clip_rect, alpha=False)
                 pix.save(str(out_path))
+                register_cache_file(out_path)
                 return str(out_path.resolve())
 
             # Fallback: open pdf
@@ -92,6 +94,7 @@ class DrawingScreenshotGenerator:
                 clip_rect = self._safe_region(region, p0)
                 pix = p0.get_pixmap(matrix=mat, clip=clip_rect, alpha=False)
                 pix.save(str(out_path))
+                register_cache_file(out_path)
                 return str(out_path.resolve())
 
         except Exception:

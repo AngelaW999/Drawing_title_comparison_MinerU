@@ -11,6 +11,7 @@ from src.index_page_processor.native_marker_enrich import (
 )
 from src.index_page_processor.parse_index_json import extract_pairs_from_json
 from src.ocr.token_provider import get_mineru_token
+from src.process_cache import register_cache_file
 
 
 def _get_index_parser(token: Optional[str] = None) -> MinerUDocumentParser:
@@ -71,10 +72,11 @@ def extract_index_pairs(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        _, markers = parse_native_markers_from_pdf(
+        native_csv_path, markers = parse_native_markers_from_pdf(
             pdf_path=pdf_path,
             output_dir=out_dir,
         )
+        register_cache_file(native_csv_path)
     except Exception as e:
         # 原生解析失败不影响主流程（比如没装 PyMuPDF/某些PDF原生抽不到）
         print(f"[WARN] native marker parse failed: {e}")

@@ -9,6 +9,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps, ImageStat
 from src.drawing_num import extract_drawing_num
 from src.ocr import MinerUClient, MinerUConfig, MinerUDocumentParser
 from src.ocr.token_provider import get_mineru_token
+from src.process_cache import register_cache_file
 
 from .build_title_and_drawing_num import build_structured_title_from_lines, split_title_marker_text
 from .native_marker import extract_native_marker_info_from_pdf
@@ -276,6 +277,7 @@ def _prepare_marker_ocr_image(image_path: Path) -> Path:
 
             out_path = image_path.with_name(f"{image_path.stem}_prep{image_path.suffix}")
             enlarged.save(out_path)
+            register_cache_file(out_path)
             return out_path
     except Exception:
         return image_path

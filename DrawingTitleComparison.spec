@@ -19,6 +19,7 @@ datas = []
 datas += collect_data_files("PIL")
 datas += collect_data_files("fitz")
 datas += collect_data_files("pymupdf")
+datas += [("assets/icon.ico", "assets"), ("assets/icon.png", "assets")]
 
 # 配置模板（可选）
 a = Analysis(
@@ -44,12 +45,13 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="DrawingTitleComparison",
+    name="目录标题对比工具",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     console=False,   # Tk GUI
+    icon="assets/icon.ico",
 )
 
 coll = COLLECT(
@@ -59,5 +61,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    name="DrawingTitleComparison",
+    name="目录标题对比工具",
 )

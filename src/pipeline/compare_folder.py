@@ -30,8 +30,8 @@ class ReviewItem:
     auto_selected: bool = False
 
 
-_TRAILING_MARKER_TOKEN_RE = re.compile(r"\((P?\d{1,3})\)\s*$", re.IGNORECASE)
-_INDEX_NOISE_CHAR_RE = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff()./\-]+")
+_TRAILING_MARKER_TOKEN_RE = re.compile(r"\((P?\d{1,4})\)\s*$", re.IGNORECASE)
+_INDEX_NOISE_CHAR_RE = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff()./\-、]+")
 
 
 def _log(cb: LogCB | None, msg: str) -> None:
