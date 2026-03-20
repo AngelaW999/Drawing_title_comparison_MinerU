@@ -19,7 +19,7 @@ datas = []
 datas += collect_data_files("PIL")
 datas += collect_data_files("fitz")
 datas += collect_data_files("pymupdf")
-datas += [("assets/icon.ico", "assets"), ("assets/icon.png", "assets")]
+datas += [("assets/icon.ico", "assets"), ("assets/icon.png", "assets"), ("assets/Token获取方法.pdf", "assets")]
 
 # 配置模板（可选）
 a = Analysis(

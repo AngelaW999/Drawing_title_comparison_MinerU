@@ -5,11 +5,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
+import fitz
 from openpyxl import Workbook
 
+from src.drawing_num import extract_drawing_num
 from src.drawing_processor.extract_drawing_title import extract_drawing_title
 from src.drawing_processor.normalize_title import normalize_title
+from src.drawing_processor.region_selector import PDFRegionFinder
 from src.index_page_processor.extract_index_pairs import extract_index_pairs
+from src.process_cache import register_cache_file
 
 LogCB = Callable[[str], None]
 
@@ -29,8 +33,19 @@ class ReviewItem:
     marker_screenshot_path: str = ""
     auto_selected: bool = False
 
+@dataclass
+class DrawingExportRecord:
+    drawing_num: str
+    title: str
+    marker: str
+    pdf_path: str
 
-_TRAILING_MARKER_TOKEN_RE = re.compile(r"\((P?\d{1,4})\)\s*$", re.IGNORECASE)
+
+_LAST_EXPORT_RECORDS: List[DrawingExportRecord] = []
+
+
+
+_TRAILING_MARKER_TOKEN_RE = re.compile(r"\(((?:P\d{1,4}|\d{1,4}[A-Z]?))\)\s*$", re.IGNORECASE)
 _INDEX_NOISE_CHAR_RE = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff()./\-、]+")
 
 
@@ -70,13 +85,90 @@ def _pick_first_index_pdf(folder: Path) -> Tuple[Path, List[Path]]:
     return pdfs[0], pdfs[1:]
 
 
+def _extract_drawing_num_from_page(page: fitz.Page) -> str:
+    layout = PDFRegionFinder.get_layout_regions(page)
+    region = layout["drawing_num_region"]
+    clip = fitz.Rect(
+        float(region.get("x0", 0.0)),
+        float(region.get("y0", 0.0)),
+        float(region.get("x1", page.rect.width)),
+        float(region.get("y1", page.rect.height)),
+    )
+    if clip.is_empty or clip.width <= 0 or clip.height <= 0:
+        return ""
+
+    grouped: Dict[Tuple[int, int], List[Tuple[int, float, str]]] = {}
+    for word in page.get_text("words", clip=clip) or []:
+        x0, _y0, _x1, _y1, text, block_no, line_no, word_no = word[:8]
+        token = str(text or "").strip()
+        if not token:
+            continue
+        grouped.setdefault((int(block_no), int(line_no)), []).append((int(word_no), float(x0), token))
+
+    for _, parts in grouped.items():
+        parts.sort(key=lambda item: (item[0], item[1]))
+        line = "".join(token for _, _, token in parts).strip()
+        dn = extract_drawing_num(line)
+        if dn:
+            return dn
+    return ""
+
+
+def _detect_first_drawing_page(pdf_path: Path) -> int:
+    with fitz.open(str(pdf_path)) as doc:
+        if doc.page_count <= 1:
+            raise ValueError("Single PDF mode requires at least 2 pages.")
+        for page_index in range(doc.page_count):
+            drawing_num = _extract_drawing_num_from_page(doc[page_index])
+            if drawing_num:
+                if page_index == 0:
+                    raise ValueError("The first page looks like a drawing page; no leading index pages detected.")
+                return page_index
+    raise ValueError("Could not detect the first drawing page in the single PDF input.")
+
+
+def _write_pdf_slice(src_pdf: Path, start_page: int, end_page: int, out_path: Path) -> Path:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with fitz.open(str(src_pdf)) as src:
+        dst = fitz.open()
+        dst.insert_pdf(src, from_page=start_page, to_page=end_page)
+        dst.save(str(out_path))
+        dst.close()
+    register_cache_file(out_path)
+    return out_path.resolve()
+
+
+def _prepare_single_pdf_inputs(pdf_path: Path, log_cb: LogCB | None = None) -> Tuple[Path, List[Path]]:
+    pdf_path = Path(pdf_path)
+    drawing_start_page = _detect_first_drawing_page(pdf_path)
+    with fitz.open(str(pdf_path)) as doc:
+        total_pages = doc.page_count
+
+    _log(log_cb, f"[1/3] Detected index pages: 1-{drawing_start_page}")
+    _log(log_cb, f"[1/3] Detected drawing pages: {drawing_start_page + 1}-{total_pages}")
+
+    base_dir = Path(".cache") / "session_inputs" / pdf_path.stem
+    index_pdf = _write_pdf_slice(pdf_path, 0, drawing_start_page - 1, base_dir / f"{pdf_path.stem}__index.pdf")
+
+    drawing_pdfs: List[Path] = []
+    for page_index in range(drawing_start_page, total_pages):
+        out_path = base_dir / f"{pdf_path.stem}__page_{page_index + 1:04d}.pdf"
+        drawing_pdfs.append(_write_pdf_slice(pdf_path, page_index, page_index, out_path))
+
+    return index_pdf, drawing_pdfs
+
+
 def build_review_items(
     folder: Path,
     max_drawings: Optional[int] = None,
     log_cb: LogCB | None = None,
+    input_mode: str = "folder",
 ) -> List[ReviewItem]:
     folder = Path(folder)
-    index_pdf, drawing_pdfs = _pick_first_index_pdf(folder)
+    if input_mode == "single_pdf":
+        index_pdf, drawing_pdfs = _prepare_single_pdf_inputs(folder, log_cb=log_cb)
+    else:
+        index_pdf, drawing_pdfs = _pick_first_index_pdf(folder)
 
     _log(log_cb, f"[1/3] Index PDF: {index_pdf.name}")
     _log(log_cb, f"[1/3] Drawing PDFs: {len(drawing_pdfs)}")
@@ -103,6 +195,7 @@ def build_review_items(
     _log(log_cb, "[3/3] Parse drawings...")
 
     items: List[ReviewItem] = []
+    export_records: List[DrawingExportRecord] = []
     seen_dn: set[str] = set()
     for i, pdf in enumerate(drawing_pdfs, start=1):
         _log(log_cb, f"  - [{i}/{len(drawing_pdfs)}] {pdf.name}")
@@ -153,6 +246,16 @@ def build_review_items(
                 elif marker_diff:
                     diff_type = "marker不一致"
 
+        if drawing_num:
+            export_records.append(
+                DrawingExportRecord(
+                    drawing_num=drawing_num,
+                    title=drawing_title,
+                    marker=extracted_drawing_marker,
+                    pdf_path=pdf_path,
+                )
+            )
+
         if diff_type:
             key = f"{drawing_num}||{Path(pdf_path).name}||{diff_type}"
             items.append(
@@ -193,25 +296,78 @@ def build_review_items(
             )
         )
 
+    global _LAST_EXPORT_RECORDS
+    _LAST_EXPORT_RECORDS = export_records
+
     _log(log_cb, f"Diff items total: {len(items)}")
     return items
+
+
+def _export_first_col_value(pdf_path: str, input_mode: str) -> str:
+    if input_mode != "single_pdf":
+        return pdf_path
+    name = Path(pdf_path).stem
+    m = re.search(r"__page_(\d+)$", name)
+    if m:
+        return str(int(m.group(1)))
+    return ""
+
+
+def _compose_full_title(title: str, marker: str) -> str:
+    title = (title or "").strip()
+    marker = (marker or "").strip().upper()
+    if title and marker:
+        return f"{title}({marker})"
+    return title
+
+
+def _build_duplicate_rows(input_mode: str) -> List[List[str]]:
+    rows: List[List[str]] = []
+
+    drawing_num_groups: Dict[str, List[DrawingExportRecord]] = {}
+    combo_groups: Dict[str, List[DrawingExportRecord]] = {}
+    for rec in _LAST_EXPORT_RECORDS:
+        if rec.drawing_num:
+            drawing_num_groups.setdefault(rec.drawing_num, []).append(rec)
+        combo = _compose_full_title(rec.title, rec.marker)
+        if combo:
+            combo_groups.setdefault(combo, []).append(rec)
+
+    for drawing_num, group in drawing_num_groups.items():
+        if len(group) < 2:
+            continue
+        row = [drawing_num, _compose_full_title(group[0].title, group[0].marker), "图号重复"]
+        row.extend(_export_first_col_value(rec.pdf_path, input_mode) for rec in group)
+        rows.append(row)
+
+    for combo, group in combo_groups.items():
+        if len(group) < 2:
+            continue
+        drawing_nums = " / ".join(rec.drawing_num for rec in group if rec.drawing_num)
+        row = [drawing_nums, combo, "标题重复"]
+        row.extend(_export_first_col_value(rec.pdf_path, input_mode) for rec in group)
+        rows.append(row)
+
+    return rows
 
 
 def write_final_excel(
     out_xlsx: Path,
     items: List[ReviewItem],
     selected_map: Dict[str, bool],
+    input_mode: str = "folder",
 ) -> int:
     out_xlsx = Path(out_xlsx)
     out_xlsx.parent.mkdir(parents=True, exist_ok=True)
 
+    first_col_title = "页码" if input_mode == "single_pdf" else "路径"
     header = [
-        "PDF路径",
+        first_col_title,
         "图号",
         "目录标题",
-        "目录marker",
+        "目录分段号",
         "图纸标题",
-        "图纸marker",
+        "图纸分段号",
         "错误类型",
     ]
 
@@ -222,7 +378,7 @@ def write_final_excel(
             continue
         rows.append(
             [
-                it.pdf_path,
+                _export_first_col_value(it.pdf_path, input_mode),
                 it.drawing_num,
                 it.index_title,
                 it.index_marker,
@@ -238,6 +394,13 @@ def write_final_excel(
     ws.append(header)
     for row in rows:
         ws.append(row)
+
+    duplicate_rows = _build_duplicate_rows(input_mode)
+    if duplicate_rows:
+        dup_ws = wb.create_sheet("重复")
+        dup_ws.append(["重复图号", "标题", "重复类型", first_col_title, f"重复{first_col_title}"])
+        for row in duplicate_rows:
+            dup_ws.append(row)
 
     wb.save(out_xlsx)
     return len(rows)

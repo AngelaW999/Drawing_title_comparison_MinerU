@@ -34,14 +34,18 @@ def _norm(text: str) -> str:
     return (text or "").strip()
 
 
+def _display_diff_type(diff_type: str) -> str:
+    return (diff_type or "").replace("marker", "分段号")
+
+
 def _build_left_text(it: ReviewItem) -> str:
     file_name = Path(it.pdf_path).name if it.pdf_path else ""
     lines = [
-        f"{it.diff_type} | 图号={it.drawing_num} | {file_name}".strip(),
+        f"{_display_diff_type(it.diff_type)} | 图号={it.drawing_num} | {file_name}".strip(),
         f"目录标题：{_norm(it.index_title)}",
-        f"目录marker：{_norm(it.index_marker)}",
+        f"目录分段号：{_norm(it.index_marker)}",
         f"图纸标题：{_norm(it.drawing_title)}",
-        f"图纸marker：{_norm(it.drawing_marker)}",
+        f"图纸分段号：{_norm(it.drawing_marker)}",
     ]
     return "\n".join(lines)
 
@@ -51,13 +55,58 @@ class ReviewWindow(tk.Toplevel):
         super().__init__(master)
         self.title(title)
         self.geometry("1380x760")
+        self.configure(bg="#eef6ff")
 
         self.items = items
         self.selected: Dict[str, bool] = {it.key: False for it in items}
         self._img_refs: Dict[str, object] = {}
-
+        self._configure_theme()
         self._build_ui()
         self._render_rows()
+
+    def _configure_theme(self) -> None:
+        style = ttk.Style(self)
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        bg = "#eef6ff"
+        panel = "#fbfdff"
+        border = "#1f5f9e"
+        text = "#16324f"
+        muted = "#4f6b88"
+        button_bg = "#f2f5f9"
+        button_active = "#e5edf7"
+
+        style.configure(".", background=bg, foreground=text)
+        style.configure("TFrame", background=bg)
+        style.configure("TLabel", background=bg, foreground=text)
+        style.configure("TCheckbutton", background=bg, foreground=text)
+        style.configure(
+            "TScrollbar",
+            background="#dcecff",
+            troughcolor=panel,
+            bordercolor=border,
+            arrowcolor=text,
+        )
+        style.configure(
+            "Big.TButton",
+            font=("Microsoft YaHei UI", 11),
+            padding=(18, 10),
+            background=button_bg,
+            foreground=text,
+            bordercolor="#9db4cc",
+            lightcolor=button_bg,
+            darkcolor=button_active,
+            focusthickness=1,
+            focuscolor=border,
+        )
+        style.map(
+            "Big.TButton",
+            background=[("active", button_active), ("disabled", "#dfe7f1")],
+            foreground=[("disabled", muted)],
+        )
 
     def _build_ui(self) -> None:
         self.var_tip = tk.StringVar(value=f"共 {len(self.items)} 条（默认不勾选；勾选后导出）")
@@ -78,7 +127,7 @@ class ReviewWindow(tk.Toplevel):
         wrap = ttk.Frame(self)
         wrap.pack(fill="both", expand=True, padx=12, pady=(6, 10))
 
-        self.canvas = tk.Canvas(wrap, highlightthickness=0)
+        self.canvas = tk.Canvas(wrap, highlightthickness=0, bg="#eef6ff")
         self.vbar = ttk.Scrollbar(wrap, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.vbar.set)
 
@@ -94,10 +143,6 @@ class ReviewWindow(tk.Toplevel):
 
         bot = ttk.Frame(self)
         bot.pack(fill="x", padx=12, pady=(0, 12))
-
-        style = ttk.Style(self)
-        style.configure("Big.TButton", font=("Microsoft YaHei UI", 11), padding=(18, 10))
-
         ttk.Button(bot, text="全不选", style="Big.TButton", command=self._select_none).pack(side="left")
         ttk.Button(bot, text="全选", style="Big.TButton", command=self._select_all).pack(side="left", padx=10)
         ttk.Button(bot, text="保存并关闭", style="Big.TButton", command=self._finish).pack(side="right")
@@ -136,19 +181,22 @@ class ReviewWindow(tk.Toplevel):
 
             img_cell = ttk.Frame(row)
             img_cell.grid(row=0, column=1, sticky="nsew", padx=(0, 10))
-
-            title_diff = "标题" in (it.diff_type or "")
-            marker_only = (it.diff_type or "") == "marker不一致"
+            title_diff = "标题" in _display_diff_type(it.diff_type)
+            marker_only = _display_diff_type(it.diff_type) == "marker不一致"
             if title_diff or not marker_only:
-                ttk.Label(img_cell, text="标题截图", anchor="w").pack(anchor="w")
-                title_lbl = ttk.Label(img_cell, text="", anchor="center")
-                title_lbl.pack(fill="both", expand=True)
+                title_wrap = ttk.Frame(img_cell)
+                title_wrap.pack(fill="both", expand=True)
+                ttk.Label(title_wrap, text="标题截图", anchor="w").pack(side="left", padx=(0, 10))
+                title_lbl = ttk.Label(title_wrap, text="", anchor="center")
+                title_lbl.pack(side="left", fill="both", expand=True)
                 self._set_image(title_lbl, f"{it.key}_title", it.screenshot_path, (560, 180))
 
             if marker_only and it.marker_screenshot_path:
-                ttk.Label(img_cell, text="marker截图", anchor="w").pack(anchor="w", pady=(6, 0))
-                marker_lbl = ttk.Label(img_cell, text="", anchor="center")
-                marker_lbl.pack(fill="both", expand=True)
+                marker_wrap = ttk.Frame(img_cell)
+                marker_wrap.pack(fill="both", expand=True, pady=(6, 0))
+                ttk.Label(marker_wrap, text="marker截图", anchor="w").pack(side="left", padx=(0, 10))
+                marker_lbl = ttk.Label(marker_wrap, text="", anchor="center")
+                marker_lbl.pack(side="left", fill="both", expand=True)
                 self._set_image(marker_lbl, f"{it.key}_marker", it.marker_screenshot_path, (280, 160))
 
             var = tk.BooleanVar(value=self.selected.get(it.key, False))
@@ -156,7 +204,23 @@ class ReviewWindow(tk.Toplevel):
             def _on_toggle(k=it.key, v=var):
                 self.selected[k] = bool(v.get())
 
-            ttk.Checkbutton(row, variable=var, command=_on_toggle).grid(row=0, column=2, sticky="n")
+            check_wrap = ttk.Frame(row)
+            check_wrap.grid(row=0, column=2, sticky="nsew")
+            tk.Checkbutton(
+                check_wrap,
+                variable=var,
+                command=_on_toggle,
+                bg="#eef6ff",
+                activebackground="#eef6ff",
+                selectcolor="#fbfdff",
+                highlightthickness=0,
+                bd=0,
+                padx=6,
+                pady=6,
+                indicatoron=True,
+                relief="flat",
+                font=("Microsoft YaHei UI", 13),
+            ).pack(expand=True)
             ttk.Separator(self.inner, orient="horizontal").pack(fill="x", pady=(2, 0))
 
             self.after(0, lambda lab=lbl_left: self._update_wrap(lab))

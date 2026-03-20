@@ -19,23 +19,35 @@ _CIRCLED_TO_INT = {
 }
 _CIRCLED_RE = re.compile(r"[①②③④⑤⑥⑦⑧⑨]")
 _DIGIT_RE = re.compile(r"\d{1,3}")
+_ALNUM_RE = re.compile(r"\d{1,3}[A-Za-z]")
 _P_MARKER_RE = re.compile(r"P\s*(\d{1,3})", re.IGNORECASE)
 _FRACTION_RE = re.compile(r"\d+\s*/\s*\d+")
 
 
 def _normalize_marker(text: str | None) -> str | None:
-    t = (text or "").strip()
+    t = (text or "").strip().upper()
     if not t:
         return None
+
     m = re.fullmatch(r"P\s*(\d{1,3})", t, re.IGNORECASE)
     if m:
         value = int(m.group(1))
         if 1 <= value <= 500:
             return f"P{value}"
+        return None
+
+    if re.fullmatch(r"\d{1,3}[A-Z]", t):
+        value = int(t[:-1])
+        if 1 <= value <= 500:
+            return t
+        return None
+
     if t.isdigit():
         value = int(t)
         if 1 <= value <= 500:
             return str(value)
+        return None
+
     if len(t) == 1 and t in _CIRCLED_TO_INT:
         return str(_CIRCLED_TO_INT[t])
     return None
@@ -115,7 +127,7 @@ def _combine_adjacent_char_tokens(
         token = str(text or "").strip()
         if not token:
             continue
-        if len(token) != 1 or not re.fullmatch(r"[0-9Pp]", token):
+        if len(token) != 1 or not re.fullmatch(r"[0-9A-Za-z]", token):
             flush()
             combined.append((token, x0, y0, x1, y1, cy))
             continue
@@ -171,10 +183,16 @@ def _extract_candidates(
         if p_found:
             continue
 
-        if re.search(r"[A-Za-z]", token) and "P" not in token.upper():
+        for alnum in _ALNUM_RE.findall(token):
+            value = _normalize_marker(alnum)
+            if value:
+                out.append((value, "number", x0, y0, x1, y1))
+
+        if re.search(r"[A-Za-z]", token) and "P" not in token.upper() and not _ALNUM_RE.search(token):
             continue
         if "/" in token:
             continue
+
         for number in _DIGIT_RE.findall(token):
             value = _normalize_marker(number)
             if value:

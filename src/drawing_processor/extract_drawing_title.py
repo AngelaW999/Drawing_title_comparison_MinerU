@@ -26,6 +26,7 @@ _LEADING_DOT_RE = re.compile(r"^[.。·•]+")
 _SUSPECT_TEXT_RE = re.compile(r"[�]")
 _CIRCLED_MARKER_RE = re.compile(r"[①-⑳]")
 _P_MARKER_RE = re.compile(r"P\s*(\d{1,3})", re.IGNORECASE)
+_ALNUM_MARKER_RE = re.compile(r"\d{1,3}[A-Za-z]")
 _DIGIT_MARKER_RE = re.compile(r"\d{1,3}")
 _FRACTION_RE = re.compile(r"\((\d+)\s*/\s*(\d+)\)\s*$")
 _LPAREN_COUNT_RE = re.compile(r"\(")
@@ -83,7 +84,6 @@ def _extract_lines(text: str) -> List[str]:
         out.append(line)
     return out
 
-
 def _normalize_marker(marker: str | None) -> str | None:
     if marker is None:
         return None
@@ -95,34 +95,41 @@ def _normalize_marker(marker: str | None) -> str | None:
         if 1 <= value <= 500:
             return f"P{value}"
         return None
+    if re.fullmatch(r"\d{1,3}[A-Z]", t):
+        value = int(t[:-1])
+        if 1 <= value <= 500:
+            return t
+        return None
     if t.isdigit():
         value = int(t)
         if 1 <= value <= 500:
             return str(value)
     circled_map = {
-        "①": "1",
-        "②": "2",
-        "③": "3",
-        "④": "4",
-        "⑤": "5",
-        "⑥": "6",
-        "⑦": "7",
-        "⑧": "8",
-        "⑨": "9",
-        "⑩": "10",
-        "⑪": "11",
-        "⑫": "12",
-        "⑬": "13",
-        "⑭": "14",
-        "⑮": "15",
-        "⑯": "16",
-        "⑰": "17",
-        "⑱": "18",
-        "⑲": "19",
-        "⑳": "20",
+        "?": "1",
+        "?": "2",
+        "?": "3",
+        "?": "4",
+        "?": "5",
+        "?": "6",
+        "?": "7",
+        "?": "8",
+        "?": "9",
+        "?": "10",
+        "?": "11",
+        "?": "12",
+        "?": "13",
+        "?": "14",
+        "?": "15",
+        "?": "16",
+        "?": "17",
+        "?": "18",
+        "?": "19",
+        "?": "20",
     }
     if t in circled_map:
         return circled_map[t]
+    return None
+
     return None
 
 
@@ -547,6 +554,12 @@ def _extract_marker_from_lines(lines: List[str]) -> str | None:
             marker = _normalize_marker(f"P{p_matches[-1]}")
             if marker:
                 return marker
+        alnum_matches = _ALNUM_MARKER_RE.findall(text)
+        if alnum_matches:
+            marker = _normalize_marker(alnum_matches[-1])
+            if marker:
+                return marker
+
 
         if "/" in text:
             continue
